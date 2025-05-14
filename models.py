@@ -10,6 +10,7 @@ class Message(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     text = Column(String)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    service_used = Column(String, nullable=True)  
 
     user = relationship("User", back_populates="messages")
 
