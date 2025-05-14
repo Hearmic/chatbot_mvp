@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import json
 from openai import OpenAI
 from sqlalchemy.exc import SQLAlchemyError
-from database import engine, Base, SessionLocal
+from database import engine, Base, SessionLocal, Company
 from sqlalchemy.orm import Session
 from models import User, Message
 from datetime import datetime, timedelta
@@ -42,20 +42,65 @@ def get_db():
 async def health_check():
     return {"status": "ok"}
 
-def load_company_policy(company_id: str = "test"):
-    """Загрузка политики компании из JSON файла."""
-    policy_path = f"policies/{company_id}_policy.json"
+def load_company_policy(company_id: int = 1):
+    """Загрузка политики компании из базы данных с расширенной обработкой."""
+    db = SessionLocal()
     try:
-        with open(policy_path, "r", encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        logger.info(f"Ошибка: Файл политики для '{company_id}' не найден.")
-        return {
-            "company": "Default",
-            "allowed_topics": [],
-            "restricted_topics": [],
-            "handoff_trigger": []
+        company = db.query(Company).filter(Company.id == company_id).first()
+        
+        if not company:
+            logger.error(f"Компания с ID {company_id} не найдена.")
+            return _get_default_policy()
+        
+        policy = company.policy or {}
+        
+        # Валидация и дополнение политики значениями по умолчанию
+        validated_policy = {
+            "company": policy.get("company", company.name),
+            "allowed_topics": policy.get("allowed_topics", []),
+            "restricted_topics": policy.get("restricted_topics", []),
+            "handoff_trigger": policy.get("handoff_trigger", [
+                "не уверена", 
+                "не знаю", 
+                "не могу ответить"
+            ]),
+            "admin_settings": policy.get("admin_settings", {
+                "admin_id": None,
+                "notifications_enabled": False
+            }),
+            "company_info": policy.get("company_info", {
+                "описание": company.description or "",
+                "адрес": "",
+                "телефон": "",
+                "сайт": company.website or ""
+            })
         }
+        
+        return validated_policy
+    
+    except SQLAlchemyError as e:
+        logger.error(f"Ошибка при загрузке политики: {e}")
+        return _get_default_policy()
+    finally:
+        db.close()
+
+def _get_default_policy():
+    """Возвращает политику по умолчанию."""
+    return {
+        "company": "Default Company",
+        "allowed_topics": [],
+        "restricted_topics": [],
+        "handoff_trigger": [
+            "не уверена", 
+            "не знаю", 
+            "не могу ответить"
+        ],
+        "admin_settings": {
+            "admin_id": None,
+            "notifications_enabled": False
+        },
+        "company_info": {}
+    }
 
 def build_prompt(script_profile: dict, user_message: str, history: list = None, user_settings: dict = None, user_data: User = None):
     """Создание промпта для ChatGPT с учетом истории и настроек пользователя."""
@@ -178,45 +223,44 @@ async def generate_ai_response(prompt: list, client: OpenAI = openai_client) -> 
         logger.info(f"Ошибка AI API ({client.base_url}): {str(e)}")
         raise
 
-@app.post(f"/webhook/{TELEGRAM_BOT_TOKEN}")
-async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
-    """Webhook endpoint для обработки обновлений от Telegram."""
+@app.post("/webhook/{company_token}")
+async def webhook(request: Request, company_token: str, db: Session = Depends(get_db)):
     try:
-        update_data = await request.json()
-        logger.info(f"Получены данные webhook: {update_data}")
+        # Находим компанию по токену
+        company = db.query(Company).filter(Company.telegram_token == company_token).first()
         
-        if 'message' in update_data:
-            user_message = update_data['message']['text']
-            chat_id = update_data['message']['chat']['id']
-            user_info = update_data['message']['chat']
-            
-            # Загрузка политики компании
-            script_profile = load_company_policy("test")
-            logger.info(f"Загружена политика компании: {script_profile}")
-
-        try:
-            # Создание или получение пользователя
-            user = db.query(User).filter(User.id == chat_id).first()
-            if not user:
-                user = User(id=chat_id, settings={})
-                db.add(user)
-                db.commit()
-                db.refresh(user)
-
-            # Сохранение сообщения пользователя
-            db_message = Message(user_id=user.id, text=user_message)
-            db.add(db_message)
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+        
+        # Проверяем, что компания активна
+        if not company.is_active:
+            raise HTTPException(status_code=403, detail="Company is not active")
+        
+        # Получаем данные от Telegram
+        user_data = await request.json()
+        user_info = user_data.get('message', {}).get('from', {})
+        chat_id = user_info.get('id')
+        user_message = user_data.get('message', {}).get('text', '')
+        
+        # Находим или создаем пользователя для этой компании
+        user = db.query(User).filter(
+            User.telegram_id == chat_id, 
+            User.company_id == company.id
+        ).first()
+        
+        if not user:
+            user = User(
+                telegram_id=chat_id, 
+                company_id=company.id, 
+                settings={}
+            )
+            db.add(user)
             db.commit()
-            db.refresh(db_message)
-        except SQLAlchemyError as e:
-            logger.error(f"Database error: {str(e)}")
-            db.rollback()
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-            db.rollback()
-            raise
-
+            db.refresh(user)
+        
+        # Используем политику компании
+        script_profile = load_company_policy(company.id)
+        
         if user_message.startswith('/my_id'):
             user_info_message = (
                 f"Ваш Telegram ID: {chat_id}\n"
@@ -226,8 +270,6 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
             await send_telegram_message(chat_id, user_info_message)
             return {"status": "ok"}
 
-        # Создание или получение пользователя
-        user = db.query(User).filter(User.id == chat_id).first()
         # Обработка команды /setlang
         if user_message.startswith("/setlang"):
             parts = user_message.split()
@@ -248,8 +290,6 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
         try:
             # Построение промпта
             prompt = build_prompt(script_profile, user_message, history, user_settings, user)
-            
-            # Попытка использовать OpenAI, затем Nebius как fallback
             reply = None
             service_used = None
 
