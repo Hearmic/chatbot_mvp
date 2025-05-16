@@ -1,9 +1,18 @@
+import os
 import click
 import json
-import uuid
-from database import SessionLocal
+import asyncio
+from dotenv import load_dotenv
+from telegram import Bot
+from sqlalchemy.orm import Session
+from database import SessionLocal, init_db
 from models import Company
-from sqlalchemy.exc import SQLAlchemyError
+
+# Initialize database
+init_db()
+
+# Load environment variables
+load_dotenv()
 
 @click.group()
 def cli():
@@ -12,69 +21,87 @@ def cli():
 
 @cli.command()
 @click.option('--name', prompt='Название компании', help='Название компании')
-@click.option('--description', prompt='Описание', help='Описание компании')
-@click.option('--website', prompt='Веб-сайт', help='Веб-сайт компании')
-@click.option('--policy-file', type=click.Path(exists=True), help='Путь к файлу политики')
-def create(name, description, website, policy_file):
+@click.option('--description', prompt='Описание (необязательно)', default='', help='Описание компании')
+@click.option('--website', prompt='Сайт (необязательно)', default='', help='Веб-сайт компании')
+@click.option('--policy-file', prompt='Путь к файлу политики', help='Путь к JSON-файлу с политикой')
+@click.option('--telegram-token', prompt='Токен Telegram бота', help='Токен Telegram бота')
+@click.option('--force', is_flag=True, help='Принудительное создание компании')
+def create(name, description, website, policy_file, telegram_token, force=False):
     """Создать новую компанию."""
-    db = SessionLocal()
-    
-    try:
-        # Генерируем уникальный токен
-        telegram_token = str(uuid.uuid4())
-        
-        # Загружаем политику из файла, если указан
-        policy = {}
-        if policy_file:
-            with open(policy_file, 'r') as f:
-                policy = json.load(f)
-        
-        company = Company(
-            name=name, 
-            telegram_token=telegram_token,
-            description=description or '',
-            website=website or '',
-            policy=policy,
-            is_active=True
-        )
-        
-        db.add(company)
-        db.commit()
-        db.refresh(company)
-        
-        click.echo(f"Компания '{name}' создана.")
-        click.echo(f"ID компании: {company.id}")
-        click.echo(f"Telegram Token: {telegram_token}")
-        
-    except SQLAlchemyError as e:
-        db.rollback()
-        click.echo(f"Ошибка при создании компании: {e}")
-    finally:
-        db.close()
+    async def async_create():
+        try:
+            # Проверка токена Telegram
+            try:
+                bot = Bot(token=telegram_token)
+                bot_info = await bot.get_me()
+                bot_username = bot_info.username
+                bot_id = bot_info.id
+            except Exception as e:
+                click.echo(f"Ошибка при проверке токена Telegram: {e}")
+                return
+
+            # Инициализация сессии базы данных
+            db = SessionLocal()
+
+            try:
+                # Проверка существования компании
+                existing_company = db.query(Company).filter(Company.name == name).first()
+                if existing_company:
+                    if force:
+                        # Удаляем существующую компанию
+                        db.delete(existing_company)
+                        db.commit()
+                    else:
+                        click.echo(f"Компания с именем '{name}' уже существует.")
+                        return
+
+                # Чтение политики из файла
+                with open(policy_file, 'r') as f:
+                    policy = json.load(f)
+
+                # Создание новой компании
+                company = Company(
+                    name=name,
+                    telegram_token=telegram_token,
+                    telegram_username=bot_username,
+                    telegram_bot_id=bot_id,
+                    description=description or '',
+                    website=website or '',
+                    policy=policy,
+                    is_active=True
+                )
+
+                db.add(company)
+                db.commit()
+                db.refresh(company)
+
+                click.echo(f"Компания '{name}' успешно создана.")
+                click.echo(f"Telegram бот: @{bot_username}")
+                click.echo(f"ID бота: {bot_id}")
+
+            except Exception as e:
+                click.echo(f"Ошибка при создании компании: {e}")
+            finally:
+                db.close()
+
+        except Exception as e:
+            click.echo(f"Общая ошибка: {e}")
+
+    # Запуск асинхронной функции
+    asyncio.run(async_create())
 
 @cli.command()
 def list():
     """Список всех компаний."""
     db = SessionLocal()
-    
     try:
         companies = db.query(Company).all()
-        
         if not companies:
             click.echo("Компании не найдены.")
-            return
-        
-        click.echo("Список компаний:")
-        for company in companies:
-            click.echo(f"ID: {company.id}")
-            click.echo(f"Название: {company.name}")
-            click.echo(f"Telegram Token: {company.telegram_token}")
-            click.echo(f"Описание: {company.description or 'Не указано'}")
-            click.echo(f"Веб-сайт: {company.website or 'Не указан'}")
-            click.echo(f"Активна: {'Да' if company.is_active else 'Нет'}")
-            click.echo("---")
-    
-    except SQLAlchemyError as e:
+        else:
+            for company in companies:
+                click.echo(f"ID: {company.id}, Название: {company.name}, Telegram: @{company.telegram_username or 'Не указан'}")
+    except Exception as e:
         click.echo(f"Ошибка при получении списка компаний: {e}")
     finally:
         db.close()
@@ -96,7 +123,7 @@ def delete(company_id):
         db.commit()
         click.echo(f"Компания '{company.name}' удалена.")
     
-    except SQLAlchemyError as e:
+    except Exception as e:
         db.rollback()
         click.echo(f"Ошибка при удалении компании: {e}")
     finally:
@@ -135,12 +162,9 @@ def update(company_id, name, description, website, policy_file, active):
         db.commit()
         click.echo(f"Информация о компании {company_id} обновлена.")
     
-    except SQLAlchemyError as e:
-        db.rollback()
-        click.echo(f"Ошибка при обновлении компании: {e}")
     except Exception as e:
         db.rollback()
-        click.echo(f"Ошибка при чтении файла политики: {e}")
+        click.echo(f"Ошибка при обновлении компании: {e}")
     finally:
         db.close()
 

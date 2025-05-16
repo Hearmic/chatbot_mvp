@@ -11,18 +11,19 @@ class Company(Base):
     telegram_token = Column(String, unique=True, nullable=False)
     description = Column(Text)
     website = Column(String)
+    policy = Column(JSON, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
-    # Политики и настройки компании
-    policy = Column(JSON)  # Хранение политик в JSON
-    
+    # Optional new columns
+    telegram_username = Column(String, nullable=True)
+    telegram_bot_id = Column(Integer, nullable=True)
+
     # Связи с другими сущностями
     users = relationship("User", back_populates="company")
     messages = relationship("Message", back_populates="company")
     integrations = relationship("Integration", back_populates="company")
-    
-    # Метаданные
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    is_active = Column(Boolean, default=True)
 
 class Message(Base):
     __tablename__ = "messages"
@@ -39,13 +40,23 @@ class Message(Base):
 
 class User(Base):
     __tablename__ = "users"
-    is_постоянный_клиент = Column(Boolean, default=False)
-    доступные_акции = Column(JSON)
-    персональная_скидка = Column(Float, default=0.0)
-    id = Column(Integer, primary_key=True, index=True)
-    company_id = Column(Integer, ForeignKey('companies.id'), nullable=False)
-    settings = Column(JSON)  
 
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=True)  # telegram username
+    email = Column(String, unique=True, index=True, nullable=True)
+    telegram_id = Column(Integer, nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    hashed_password = Column(String, nullable=True)
+    
+    # Новые поля для клиентского профиля
+    is_постоянный_клиент = Column(Boolean, default=False)
+    доступные_акции = Column(JSON, default=list)
+    персональная_скидка = Column(Float, default=0.0)
+    
+    # Настройки пользователя
+    settings = Column(JSON, default=dict)
+
+    # Связь с компанией
     company = relationship("Company", back_populates="users")
     messages = relationship("Message", back_populates="user")
 

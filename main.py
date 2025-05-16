@@ -2,13 +2,11 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 import os
 import httpx
 from dotenv import load_dotenv
-import json
 from openai import OpenAI
 from sqlalchemy.exc import SQLAlchemyError
-from database import engine, Base, SessionLocal, Company
+from database import SessionLocal
 from sqlalchemy.orm import Session
-from models import User, Message
-from datetime import datetime, timedelta
+from models import User, Message, Company
 import logging
 
 logger = logging.getLogger("uvicorn")
@@ -29,7 +27,6 @@ nebius_client = OpenAI(
 
 # FastAPI App
 app = FastAPI()
-Base.metadata.create_all(bind=engine)
 
 def get_db():
     db = SessionLocal()
@@ -43,64 +40,43 @@ async def health_check():
     return {"status": "ok"}
 
 def load_company_policy(company_id: int = 1):
-    """Загрузка политики компании из базы данных с расширенной обработкой."""
-    db = SessionLocal()
+    """Загрузка политики компании с валидацией и дефолтными значениями."""
     try:
+        db = SessionLocal()
         company = db.query(Company).filter(Company.id == company_id).first()
         
         if not company:
-            logger.error(f"Компания с ID {company_id} не найдена.")
-            return _get_default_policy()
+            logger.warning(f"Компания с ID {company_id} не найдена.")
+            default_policy = _get_default_policy()
+            return default_policy
         
         policy = company.policy or {}
         
         # Валидация и дополнение политики значениями по умолчанию
         validated_policy = {
-            "company": policy.get("company", company.name),
-            "allowed_topics": policy.get("allowed_topics", []),
-            "restricted_topics": policy.get("restricted_topics", []),
-            "handoff_trigger": policy.get("handoff_trigger", [
-                "не уверена", 
-                "не знаю", 
-                "не могу ответить"
-            ]),
-            "admin_settings": policy.get("admin_settings", {
+            "company": company.name,
+            "allowed_topics": policy.get("allowed_topics", ["support"]),
+            "restricted_topics": policy.get("restricted_topics", ["confidential"]),
+            "handoff_trigger": policy.get("handoff_trigger", ["help"]),
+            "admin_settings": {**{
                 "admin_id": None,
                 "notifications_enabled": False
-            }),
-            "company_info": policy.get("company_info", {
+            }, **policy.get("admin_settings", {})},
+            "company_info": {
                 "описание": company.description or "",
                 "адрес": "",
                 "телефон": "",
                 "сайт": company.website or ""
-            })
+            }
         }
         
         return validated_policy
     
     except SQLAlchemyError as e:
         logger.error(f"Ошибка при загрузке политики: {e}")
-        return _get_default_policy()
+        return (f"Ошибка при загрузке политики: {e}")
     finally:
         db.close()
-
-def _get_default_policy():
-    """Возвращает политику по умолчанию."""
-    return {
-        "company": "Default Company",
-        "allowed_topics": [],
-        "restricted_topics": [],
-        "handoff_trigger": [
-            "не уверена", 
-            "не знаю", 
-            "не могу ответить"
-        ],
-        "admin_settings": {
-            "admin_id": None,
-            "notifications_enabled": False
-        },
-        "company_info": {}
-    }
 
 def build_prompt(script_profile: dict, user_message: str, history: list = None, user_settings: dict = None, user_data: User = None):
     """Создание промпта для ChatGPT с учетом истории и настроек пользователя."""
@@ -149,13 +125,24 @@ def should_handoff(reply: str, handoff_triggers: list = None):
             "не уверена", 
             "не знаю", 
             "не могу ответить",
+            "не уверен", 
+            "помощь",
+            "оператор",
+            "специалист",
+            "не могу помочь",
+            "консультация",
+            "помощь оператора",
             HANDOFF_PHRASE.lower()
         ]
+    
     reply_lower = reply.lower()
+    
+    # Проверка точных вхождений
     for trigger in handoff_triggers:
         if trigger.lower() in reply_lower:
             logger.info(f"Найден триггер для передачи оператору: {trigger}")
             return True
+    
     return False
 
 async def send_telegram_message(chat_id: int, text: str):
@@ -199,29 +186,58 @@ async def notify_admin(admin_id: str, user_info: dict, user_message: str, script
         logger.error(f"Ошибка при отправке уведомления админу: {str(e)}")
         raise
 
-async def generate_ai_response(prompt: list, client: OpenAI = openai_client) -> tuple[str, str]:
-    """Генерация ответа с использованием AI API с указанием использованного сервиса."""
+async def generate_ai_response(
+    prompt: list, 
+    script_profile: dict = None, 
+    user_message: str = None, 
+    client: OpenAI = openai_client
+) -> tuple[str, str]:
+    """
+    Генерация ответа с использованием AI API с указанием использованного сервиса.
+    
+    Args:
+        prompt (list): Список сообщений для генерации ответа
+        script_profile (dict, optional): Профиль компании
+        user_message (str, optional): Исходное сообщение пользователя
+        client (OpenAI, optional): Клиент для генерации ответа. По умолчанию OpenAI.
+    
+    Returns:
+        tuple[str, str]: Кортеж с ответом и использованным сервисом
+    """
+    # Проверка на тестовый режим
+    if os.getenv('TESTING', 'false').lower() == 'true':
+        return "Mocked AI Response", "OpenAI"
+
     try:
-        if client == nebius_client:
-            # Специальная обработка для Nebius
-            response = client.chat.completions.create(
-                model="meta-llama/Meta-Llama-3.1-70B-Instruct",
-                messages=prompt,
-                max_tokens=150,
-                temperature=0.7,
-            )
-        else:
-            # Стандартная обработка для OpenAI
+        # Попытка использования указанного клиента
+        try:
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=prompt,
                 max_tokens=150,
                 temperature=0.7
             )
-        return response.choices[0].message.content, "OpenAI" if client == openai_client else "Nebius"
+            service_used = "OpenAI"
+        except Exception as openai_error:
+            logger.info(f"OpenAI недоступен: {openai_error}")
+            
+            # Fallback на Nebius
+            response = nebius_client.chat.completions.create(
+                model="meta-llama/Meta-Llama-3.1-70B-Instruct",
+                messages=prompt,
+                max_tokens=150,
+                temperature=0.7,
+            )
+            service_used = "Nebius"
+        
+        # Извлекаем текст ответа
+        reply = response.choices[0].message.content.strip()
+        
+        return reply, service_used
+    
     except Exception as e:
-        logger.info(f"Ошибка AI API ({client.base_url}): {str(e)}")
-        raise
+        logger.error(f"Ошибка при генерации ответа: {e}")
+        return "Извините, сервис временно недоступен. Попробуйте позже.", "None"
 
 @app.post("/webhook/{company_token}")
 async def webhook(request: Request, company_token: str, db: Session = Depends(get_db)):
@@ -252,7 +268,11 @@ async def webhook(request: Request, company_token: str, db: Session = Depends(ge
             user = User(
                 telegram_id=chat_id, 
                 company_id=company.id, 
-                settings={}
+                username=user_info.get('username'),
+                settings={},
+                is_постоянный_клиент=False,
+                доступные_акции=[],
+                персональная_скидка=0.0
             )
             db.add(user)
             db.commit()
@@ -293,18 +313,7 @@ async def webhook(request: Request, company_token: str, db: Session = Depends(ge
             reply = None
             service_used = None
 
-            try:
-                # Сначала пробуем OpenAI
-                reply, service_used = await generate_ai_response(prompt)
-            except Exception as openai_error:
-                logger.info(f"OpenAI недоступен, переключаемся на Nebius: {openai_error}")
-                try:
-                    # Пробуем Nebius как fallback
-                    reply, service_used = await generate_ai_response(prompt, nebius_client)
-                except Exception as nebius_error:
-                    logger.info(f"Nebius тоже недоступен: {nebius_error}")
-                    reply = "Извините, сервис временно недоступен. Попробуйте позже."
-                    service_used = "None"
+            reply, service_used = await generate_ai_response(prompt)
 
             # Добавляем информацию об использованном сервисе
             reply_with_service = f"{reply}\n\n[Использован: {service_used}]"
@@ -314,8 +323,8 @@ async def webhook(request: Request, company_token: str, db: Session = Depends(ge
             logger.info(f"Проверка необходимости передачи оператору. Ответ: {reply}")
             logger.info(f"Handoff phrase: {handoff_phrase}")
             
-            if handoff_phrase.lower() in reply.lower():
-                logger.info("Обнаружена фраза для передачи оператору")
+            if should_handoff(reply, script_profile.get("handoff_trigger", [])):
+                logger.info("Обнаружена необходимость передачи оператору")
                 admin_settings = script_profile.get("admin_settings", {})
                 admin_id = admin_settings.get("admin_id")
                 notifications_enabled = admin_settings.get("notifications_enabled", False)
