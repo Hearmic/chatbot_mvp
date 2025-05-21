@@ -1,0 +1,424 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+
+{% block title %}My Profile{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body text-center">
+                    <div class="position-relative d-inline-block mb-3">
+                        {% if admin_profile.profile_picture %}
+                            <img src="{{ admin_profile.profile_picture.url }}" 
+                                class="rounded-circle border border-4 border-primary" 
+                                width="150" height="150" 
+                                alt="{{ admin_profile.get_full_name }}">
+                        {% else %}
+                            <img src="{% static 'admin_panel/img/default-avatar.png' %}" 
+                                class="rounded-circle border border-4 border-primary" 
+                                width="150" height="150" 
+                                alt="{{ admin_profile.get_full_name }}">
+                        {% endif %}
+                        <button class="btn btn-primary btn-sm position-absolute bottom-0 end-0 rounded-circle" 
+                                type="button" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#uploadAvatarModal"
+                                style="width: 40px; height: 40px;">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                    </div>
+                    <h4 class="mb-1">{{ admin_profile.get_full_name|default:admin_profile.email }}</h4>
+                    <p class="text-muted mb-2">{{ admin_profile.position|default:"Administrator" }}</p>
+                    <p class="text-muted">{{ admin_profile.company.name|default:"No Company" }}</p>
+                    
+                    <div class="d-flex justify-content-center gap-2 mb-3">
+                        {% if admin_profile.linkedin %}
+                        <a href="{{ admin_profile.linkedin }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-circle">
+                            <i class="fab fa-linkedin-in"></i>
+                        </a>
+                        {% endif %}
+                        {% if admin_profile.twitter %}
+                        <a href="{{ admin_profile.twitter }}" target="_blank" class="btn btn-outline-info btn-sm rounded-circle">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-grid">
+                        <a href="{% url 'admin_panel:change_password' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-key me-2"></i>Change Password
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-0">Member Since</h6>
+                            <small class="text-muted">{{ admin.date_joined|date:"M Y" }}</small>
+                        </div>
+                        <div class="text-end">
+                            <h6 class="mb-0">Last Login</h6>
+                            <small class="text-muted">{{ admin.last_login|timesince }} ago</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">Company Information</h6>
+                </div>
+                <div class="card-body">
+                    {% if request.user.company %}
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-building fa-2x text-primary"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">{{ request.user.company.name }}</h6>
+                            <small class="text-muted">{{ request.user.department|default:"Administration" }}</small>
+                        </div>
+                    </div>
+                    {% if request.user.company.phone %}
+                    <p class="mb-2">
+                        <i class="fas fa-phone me-2 text-muted"></i>
+                        {{ request.user.company.phone }}
+                    </p>
+                    {% endif %}
+                    {% if request.user.company.website %}
+                    <p class="mb-2">
+                        <i class="fas fa-globe me-2 text-muted"></i>
+                        <a href="{{ request.user.company.website }}" target="_blank" class="text-decoration-none">
+                            {{ request.user.company.website|truncatechars:20 }}
+                        </a>
+                    </p>
+                    {% endif %}
+                    {% if request.user.company.address %}
+                    <p class="mb-0">
+                        <i class="fas fa-map-marker-alt me-2 text-muted"></i>
+                        <small>{{ request.user.company.address|truncatewords:8 }}</small>
+                    </p>
+                    {% endif %}
+                    {% else %}
+                    <p class="mb-0 text-muted">No company information available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Profile Information</h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                            data-bs-toggle="modal" data-bs-target="#editProfileModal">
+                        <i class="fas fa-edit me-1"></i> Edit Profile
+                    </button>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">First Name</label>
+                                <input type="text" class="form-control" value="{{ request.user.first_name }}" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Last Name</label>
+                                <input type="text" class="form-control" value="{{ request.user.last_name }}" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" class="form-control" value="{{ request.user.email }}" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Phone</label>
+                                <input type="text" class="form-control" value="{{ request.user.phone|default:'Not provided' }}" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Position</label>
+                                <input type="text" class="form-control" value="{{ request.user.position|default:'Not specified' }}" readonly>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Department</label>
+                                <input type="text" class="form-control" value="{{ request.user.department|default:'Not specified' }}" readonly>
+                            </div>
+                        </div>
+                        {% if profile.bio %}
+                        <div class="mb-3">
+                            <label class="form-label">Bio</label>
+                            <div class="border rounded p-3 bg-light">
+                                {{ profile.bio|linebreaks }}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Activity Log</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Activity</th>
+                                    <th>IP Address</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>{{ admin.last_login|date:"M d, Y H:i" }}</td>
+                                    <td>Last login</td>
+                                    <td>192.168.1.1</td>
+                                </tr>
+                                <tr>
+                                    <td>{{ admin.date_joined|date:"M d, Y" }}</td>
+                                    <td>Account created</td>
+                                    <td>System</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="modal fade" id="editProfileModal" tabindex="-1" aria-labelledby="editProfileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="profileForm" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editProfileModalLabel">Edit Profile</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="first_name" class="form-label">First Name</label>
+                            <input type="text" class="form-control" id="first_name" name="user-first_name" 
+                                value="{{ admin_profile.first_name }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="last_name" class="form-label">Last Name</label>
+                            <input type="text" class="form-control" id="last_name" name="user-last_name" 
+                                value="{{ admin_profile.last_name }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="user-email" 
+                                value="{{ admin_profile.email }}" disabled>
+                            <small class="text-muted">Contact administrator to change email</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="phone" class="form-label">Phone</label>
+                            <input type="text" class="form-control" id="phone" name="profile-phone" 
+                                value="{{ admin_profile.phone|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="position" class="form-label">Position</label>
+                            <input type="text" class="form-control" id="position" name="profile-position" 
+                                value="{{ profile.position|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="department" class="form-label">Department</label>
+                            <input type="text" class="form-control" id="department" name="profile-department" 
+                                value="{{ profile.department|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="linkedin" class="form-label">LinkedIn Profile</label>
+                            <input type="url" class="form-control" id="linkedin" name="profile-linkedin" 
+                                value="{{ admin_profile.linkedin|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="twitter" class="form-label">Twitter Profile</label>
+                            <input type="url" class="form-control" id="twitter" name="profile-twitter" 
+                                value="{{ admin_profile.twitter|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="profile-picture" class="form-label">Profile Picture</label>
+                            <input type="file" class="form-control" id="profile-picture" name="profile-picture">
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="remove_picture" name="remove_picture">
+                                <label class="form-check-label" for="remove_picture">
+                                    Remove current profile picture
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('profileForm');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        // Disable button and show loading state
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+        
+        fetch("{% url 'admin_panel:update_profile' %}", {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Update the profile display
+                const profileDisplay = document.getElementById('profileDisplay');
+                if (profileDisplay) {
+                    // Update fields as needed
+                    profileDisplay.querySelector('.name').textContent = `${formData.get('user-first_name')} ${formData.get('user-last_name')}`;
+                    profileDisplay.querySelector('.position').textContent = formData.get('profile-position');
+                    
+                    // Update profile picture if changed
+                    const newPicture = formData.get('profile-picture');
+                    if (newPicture) {
+                        const profilePicture = profileDisplay.querySelector('.profile-picture');
+                        if (profilePicture) {
+                            // You might need to handle the new picture URL here
+                            // This depends on how your backend returns the new picture URL
+                        }
+                    }
+                }
+                
+                // Show success message
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success';
+                successAlert.textContent = data.message;
+                form.parentNode.insertBefore(successAlert, form);
+                
+                // Close modal after a delay
+                setTimeout(() => {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editProfileModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                }, 1000);
+            } else {
+                // Display form errors
+                const errorAlert = document.createElement('div');
+                errorAlert.className = 'alert alert-danger';
+                
+                if (data.errors) {
+                    errorAlert.innerHTML = '<ul>' + 
+                        Object.entries(data.errors).map(([field, errors]) => 
+                            `<li>${field}: ${errors.join(', ')}</li>`
+                        ).join('') + 
+                        '</ul>';
+                } else {
+                    errorAlert.textContent = data.message;
+                }
+                
+                form.parentNode.insertBefore(errorAlert, form);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            const errorAlert = document.createElement('div');
+            errorAlert.className = 'alert alert-danger';
+            errorAlert.textContent = 'An error occurred while updating your profile. Please try again.';
+            form.parentNode.insertBefore(errorAlert, form);
+        })
+        .finally(() => {
+            // Re-enable button and restore text
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Save Changes';
+        });
+    });
+});
+</script>
+
+<!-- Upload Avatar Modal -->
+<div class="modal fade" id="uploadAvatarModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Profile Picture</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="mb-3">
+                        <img id="avatarPreview" 
+                             src="{{ profile.profile_picture.url|default:'/static/admin_panel/img/default-avatar.png' }}" 
+                             class="img-fluid rounded-circle border" 
+                             width="200" height="200" 
+                             alt="Profile Preview" 
+                             style="object-fit: cover;">
+                    </div>
+                    <div class="mb-3">
+                        <input type="file" class="form-control" id="profile_picture_modal" name="profile_picture" 
+                               accept="image/*" onchange="previewImage(this, 'avatarPreview')">
+                    </div>
+                    {% if profile.profile_picture %}
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="remove_picture_modal" name="remove_picture">
+                        <label class="form-check-label" for="remove_picture_modal">
+                            Remove current picture
+                        </label>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Preview image before upload
+    function previewImage(input, previewId) {
+        const preview = document.getElementById(previewId);
+        const file = input.files[0];
+        const reader = new FileReader();
+        
+        reader.onloadend = function() {
+            preview.src = reader.result;
+        }
+        
+        if (file) {
+            reader.readAsDataURL(file);
+        } else {
+            preview.src = "{{ profile.profile_picture.url|default:'/static/admin_panel/img/default-avatar.png' }}";
+        }
+    }
+    
+    // Initialize tooltips
+    document.addEventListener('DOMContentLoaded', function() {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
+{% endblock %}

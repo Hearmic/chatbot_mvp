@@ -1,0 +1,176 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Edit Admin User</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'admin_panel:admin_dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'admin_panel:admin_users' %}">Admin Users</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Edit Admin</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <!-- Basic Information -->
+                            <div class="col-md-6 mb-3">
+                                <h4>Basic Information</h4>
+                                <div class="form-group">
+                                    {{ form.email.label_tag }}
+                                    {{ form.email }}
+                                    {% if form.email.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.email.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form.first_name.label_tag }}
+                                    {{ form.first_name }}
+                                    {% if form.first_name.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.first_name.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form.last_name.label_tag }}
+                                    {{ form.last_name }}
+                                    {% if form.last_name.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.last_name.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Contact Information -->
+                            <div class="col-md-6 mb-3">
+                                <h4>Contact Information</h4>
+                                <div class="form-group">
+                                    {{ form.phone.label_tag }}
+                                    {{ form.phone }}
+                                    {% if form.phone.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.phone.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form.position.label_tag }}
+                                    {{ form.position }}
+                                    {% if form.position.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.position.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="form-group">
+                                    {{ form.department.label_tag }}
+                                    {{ form.department }}
+                                    {% if form.department.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.department.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <!-- Status and Permissions -->
+                            <div class="col-md-6 mb-3">
+                                <h4>Status & Permissions</h4>
+                                <div class="form-group form-check">
+                                    {{ form.is_active.label_tag }}
+                                    {{ form.is_active }}
+                                    {% if form.is_active.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.is_active.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="form-group form-check">
+                                    {{ form.is_staff.label_tag }}
+                                    {{ form.is_staff }}
+                                    {% if form.is_staff.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.is_staff.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="form-group form-check">
+                                    {{ form.is_primary_admin.label_tag }}
+                                    {{ form.is_primary_admin }}
+                                    {% if form.is_primary_admin.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.is_primary_admin.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Company -->
+                            <div class="col-md-6 mb-3">
+                                <div class="form-group">
+                                    {{ form.company.label_tag }}
+                                    {{ form.company }}
+                                    {% if form.company.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.company.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                                <a href="{% url 'admin_panel:admin_users' %}" class="btn btn-secondary">Cancel</a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Form validation
+    (function () {
+        'use strict';
+        var forms = document.querySelectorAll('.needs-validation');
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    })();
+</script>
+{% endblock %}

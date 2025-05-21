@@ -1,0 +1,184 @@
+/* Admin Panel Specific Styles */
+
+/* Navigation */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 0.75rem 0;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.5rem;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    background-color: var(--card-bg);
+    margin-bottom: 1.5rem;
+    transition: var(--transition);
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    border-bottom: 1px solid var(--border-color);
+    background-color: transparent;
+    padding: 1.25rem 1.5rem;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+/* Service Integration Styles */
+.service-integration {
+    padding: 2rem 0;
+}
+
+.service-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.service-card .card-body {
+    flex: 1;
+}
+
+.service-card .card-footer {
+    border-top: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+    background-color: transparent;
+}
+
+/* Integration Forms */
+.integration-form {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.integration-form .form-group {
+    margin-bottom: 1.5rem;
+}
+
+.integration-form .form-control {
+    height: calc(2.25rem + 2px);
+}
+
+/* Data Transfer Options */
+.data-transfer-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 2rem 0;
+}
+
+.transfer-option {
+    text-align: center;
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+}
+
+.transfer-option:hover {
+    background-color: var(--light-color);
+}
+
+.transfer-option i {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Policy Management */
+.policy-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.policy-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.policy-card .card-body {
+    flex: 1;
+    padding: 1.5rem;
+}
+
+.policy-card .card-footer {
+    border-top: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+    background-color: transparent;
+}
+
+/* Company Profile */
+.company-profile {
+    padding: 2rem 0;
+}
+
+.company-profile .profile-header {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.company-profile .profile-image {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid var(--card-bg);
+}
+
+.company-profile .profile-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Bot Settings */
+.bot-settings {
+    padding: 2rem 0;
+}
+
+.bot-settings .settings-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    background-color: var(--light-color);
+}
+
+.bot-settings .settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.bot-settings .settings-header h3 {
+    margin: 0;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .service-integration {
+        padding: 1rem 0;
+    }
+    
+    .data-transfer-options {
+        grid-template-columns: 1fr;
+    }
+    
+    .policy-list {
+        grid-template-columns: 1fr;
+    }
+}

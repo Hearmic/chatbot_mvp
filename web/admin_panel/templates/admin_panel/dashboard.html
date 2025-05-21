@@ -1,0 +1,215 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row">
+        <!-- Total Users Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+        </div>
+    </div>
+
+    <!-- Overview Cards -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Users</h5>
+                    <p class="card-text display-4">{{ stats.total_users }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Active Users</h5>
+                    <p class="card-text display-4">{{ stats.active_users }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Admins</h5>
+                    <p class="card-text display-4">{{ stats.admins }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Total Messages</h5>
+                    <p class="card-text display-4">{{ stats.total_messages }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Metrics -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Performance Metrics</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <h6>Response Rate</h6>
+                                <p class="metric-value">{{ performance.response_rate }}</p>
+                                <p class="metric-label">Messages per User</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <h6>User Growth</h6>
+                                <p class="metric-value">{{ performance.user_growth }}</p>
+                                <p class="metric-label">Last 24h</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <h6>Engagement Rate</h6>
+                                <p class="metric-value">{{ performance.engagement_rate }}</p>
+                                <p class="metric-label">Messages per User</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Time Stats -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Response Time Statistics</h5>
+                    <div class="metric-card">
+                        <h6>Average Response Time</h6>
+                        <p class="metric-value">{{ stats.average_response_time|default:0|floatformat:2 }} seconds</p>
+                        <p class="metric-label">Last 24h</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Messages</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Message</th>
+                                    <th>From</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for message in recent_messages %}
+                                <tr>
+                                    <td>{{ message.text|truncatechars:50 }}</td>
+                                    <td>{{ message.client.get_full_name }}</td>
+                                    <td>{{ message.created_at|timesince }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Last 24 Hours</h5>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <h6>Total Messages</h6>
+                            <p class="metric-value">{{ stats.last_24_hours.messages }}</p>
+                        </div>
+                        <div class="metric-item">
+                            <h6>New Users</h6>
+                            <p class="metric-value">{{ stats.last_24_hours.new_users }}</p>
+                        </div>
+                        <div class="metric-item">
+                            <h6>Unique Users</h6>
+                            <p class="metric-value">{{ stats.last_24_hours.unique_users }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Users -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <!-- Card Header - Dropdown -->
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Users</h6>
+                </div>
+                <!-- Card Body -->
+                <div class="card-body">
+                    {% if stats.recent_users %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered" id="recentUsersTable" width="100%" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Email</th>
+                                        <th>Date Joined</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for user in stats.recent_users %}
+                                    <tr>
+                                        <td>{{ user.username|default:"N/A" }}</td>
+                                        <td>{{ user.email|default:"N/A" }}</td>
+                                        <td>{{ user.date_joined|date:"M d, Y H:i" }}</td>
+                                        <td>
+                                            {% if user.is_active %}
+                                                <span class="badge bg-success">Active</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Inactive</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted">No users found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize DataTable if needed
+    $(document).ready(function() {
+        $('#recentUsersTable').DataTable({
+            "order": [[2, "desc"]]  // Sort by date_joined by default
+        });
+    });
+</script>
+{% endblock %}

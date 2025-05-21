@@ -1,0 +1,162 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        {% if service == 'bitrix' %}
+                            Bitrix24 Data Transfer
+                        {% elif service == 'amocrm' %}
+                            AmoCRM Data Transfer
+                        {% else %}
+                            Data Transfer Options
+                        {% endif %}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{% url 'admin_panel:data_transfer_options' service %}" id="transferForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="service" value="{{ service }}">
+                        
+                        <div class="mb-4">
+                            <h5 class="mb-3">Data Transfer Type</h5>
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="transfer_choice" 
+                                    id="transferData" value="transfer" required>
+                                <label class="form-check-label fw-bold" for="transferData">
+                                    Transfer Data from {% if service == 'bitrix' %}Bitrix24{% else %}AmoCRM{% endif %}
+                                </label>
+                                <div class="form-text">
+                                    This will import users and their data to your local database.
+                                </div>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="transfer_choice" 
+                                    id="noTransfer" value="no_transfer">
+                                <label class="form-check-label fw-bold" for="noTransfer">
+                                    Connect without Data Transfer
+                                </label>
+                                <div class="form-text">
+                                    Only set up the connection without importing any data.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h5 class="mb-3">Platforms for Synchronization</h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="platforms" 
+                                            id="telegram" value="telegram" checked>
+                                        <label class="form-check-label" for="telegram">
+                                            <i class="fab fa-telegram me-2"></i>Telegram
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="platforms" 
+                                            id="whatsapp" value="whatsapp">
+                                        <label class="form-check-label" for="whatsapp">
+                                            <i class="fab fa-whatsapp me-2"></i>WhatsApp
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="platforms" 
+                                            id="instagram" value="instagram">
+                                        <label class="form-check-label" for="instagram">
+                                            <i class="fab fa-instagram me-2"></i>Instagram
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{% url 'admin_panel:select_service' %}" class="btn btn-outline-secondary me-md-2">
+                                <i class="fas fa-arrow-left me-1"></i> Back
+                            </a>
+                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                                <i class="fas fa-sync me-1"></i> Start Synchronization
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Synchronization Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h6>What will be synchronized?</h6>
+                        <ul class="mb-0">
+                            <li>User profiles (name, email, phone, etc.)</li>
+                            <li>User roles and permissions</li>
+                            <li>Basic contact information</li>
+                        </ul>
+                    </div>
+                    <div id="syncProgress" class="d-none">
+                        <div class="progress mb-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <p class="text-muted text-center mb-0">Synchronization in progress. Please wait...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.getElementById('transferForm').addEventListener('submit', function(e) {
+        const submitBtn = document.getElementById('submitBtn');
+        const syncProgress = document.getElementById('syncProgress');
+        
+        // Disable the submit button
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Processing...';
+        
+        // Show progress bar
+        syncProgress.classList.remove('d-none');
+        const progressBar = syncProgress.querySelector('.progress-bar');
+        
+        // Simulate progress (you can replace this with actual progress updates)
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 10;
+            if (progress <= 90) {
+                progressBar.style.width = progress + '%';
+            }
+        }, 300);
+        
+        // Clear interval when form is submitted
+        window.setTimeout(() => {
+            clearInterval(interval);
+            progressBar.style.width = '100%';
+        }, 3000);
+    });
+</script>
+{% endblock %}
+
+{% endblock %}

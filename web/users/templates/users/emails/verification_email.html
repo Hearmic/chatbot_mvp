@@ -1,0 +1,33 @@
+{% load i18n %}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{% trans 'Email Verification' %}</title>
+</head>
+<body>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>{% trans 'Verify Your Email Address' %}</h2>
+        <p>{% trans 'Hello' %} {{ user.get_full_name|default:user.email }},</p>
+        <p>{% trans 'Thank you for signing up. Please click the button below to verify your email address:' %}</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{ verification_url }}" 
+               style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+                {% trans 'Verify Email' %}
+            </a>
+        </div>
+        
+        <p>{% trans 'If the button above does not work, please copy and paste the following URL into your browser:' %}</p>
+        <p><a href="{{ verification_url }}" style="word-break: break-all;">{{ verification_url }}</a></p>
+        
+        <p>{% trans 'If you did not create an account, please ignore this email.' %}</p>
+        
+        <hr>
+        <p style="color: #666; font-size: 12px;">
+            {% trans 'This is an automated message, please do not reply directly to this email.' %}
+        </p>
+    </div>
+</body>
+</html>

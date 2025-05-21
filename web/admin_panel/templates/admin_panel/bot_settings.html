@@ -1,0 +1,691 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-switch@3.3.4/dist/css/bootstrap3/bootstrap-switch.min.css" rel="stylesheet">
+<style>
+    .form-control {
+        height: 34px;
+        font-size: 14px;
+    }
+    textarea.form-control {
+        height: 80px;
+        font-size: 14px;
+    }
+    .form-select {
+        height: 34px;
+        font-size: 14px;
+    }
+    
+    /* Make message inputs more compact */
+    .messages-section .form-control {
+        height: 28px;
+        font-size: 13px;
+    }
+    .messages-section textarea.form-control {
+        height: 60px;
+        font-size: 13px;
+    }
+</style>
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Bot Settings</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'admin_panel:admin_dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Bot Settings</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Messages Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Messages</h5>
+                </div>
+                <div class="card-body messages-section">
+                    <div class="row">
+                        {% for field in form %}
+                            {% if field.name == 'welcome_message' or field.name == 'fallback_message' or field.name == 'handoff_message' or field.name == 'off_hours_message' or field.name == 'thanks_message' %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="form-group">
+                                        {{ field.label_tag }}
+                                        {{ field }}
+                                        {% if field.errors %}
+                                            <div class="invalid-feedback d-block">
+                                                {{ field.errors.0 }}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Policy Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Policies</h5>
+                    <button type="button" class="btn btn-primary btn-sm float-end" data-bs-toggle="modal" data-bs-target="#addPolicyModal">
+                        <i class="fas fa-plus"></i> Add Policy
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Title</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for policy in policies %}
+                                <tr>
+                                    <td>{{ policy.get_category_display }}</td>
+                                    <td>{{ policy.title }}</td>
+                                    <td>
+                                        <span class="badge {% if policy.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {% if policy.is_active %}Active{% else %}Inactive{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-warning edit-policy" data-policy-id="{{ policy.id }}" data-bs-toggle="modal" data-bs-target="#editPolicyModal">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-policy" data-policy-id="{{ policy.id }}" data-bs-toggle="modal" data-bs-target="#deletePolicyModal">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center">No policies added yet</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">FAQs</h5>
+                    <button type="button" class="btn btn-primary btn-sm float-end" data-bs-toggle="modal" data-bs-target="#addFaqModal">
+                        <i class="fas fa-plus"></i> Add FAQ
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Question</th>
+                                    <th>Answer</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for faq in faqs %}
+                                <tr>
+                                    <td>{{ faq.question }}</td>
+                                    <td>{{ faq.answer }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-warning edit-faq" data-faq-id="{{ faq.id }}" data-bs-toggle="modal" data-bs-target="#editFaqModal">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-faq" data-faq-id="{{ faq.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center">No FAQs added yet</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Policy Modal -->
+    <div class="modal fade" id="addPolicyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Policy</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addPolicyForm" action="{% url 'admin_panel:add_policy' company.id %}" method="POST">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="addPolicyCategory" class="form-label">Category</label>
+                            <select class="form-select" id="addPolicyCategory" name="category" required>
+                                <option value="">Select a category</option>
+                                <option value="cancellation">Cancellation Policy</option>
+                                <option value="privacy">Privacy Policy</option>
+                                <option value="refund">Refund Policy</option>
+                                <option value="late_arrival">Late Arrival Policy</option>
+                                <option value="no_show">No Show Policy</option>
+                                <option value="custom">Custom Policy</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="addPolicyTitle" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="addPolicyTitle" name="title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="addPolicyContent" class="form-label">Content</label>
+                            <textarea class="form-control" id="addPolicyContent" name="content" rows="6" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="addPolicyActive" name="is_active" checked>
+                                <label class="form-check-label" for="addPolicyActive">
+                                    Active
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="savePolicyBtn">Save Policy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Policy Modal -->
+    <div class="modal fade" id="editPolicyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Policy</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editPolicyForm">
+                        <input type="hidden" id="editPolicyId">
+                        <div class="mb-3">
+                            <label for="editPolicyCategory" class="form-label">Category</label>
+                            <select class="form-select" id="editPolicyCategory" name="category" required>
+                                <option value="cancellation">Cancellation Policy</option>
+                                <option value="privacy">Privacy Policy</option>
+                                <option value="refund">Refund Policy</option>
+                                <option value="late_arrival">Late Arrival Policy</option>
+                                <option value="no_show">No Show Policy</option>
+                                <option value="custom">Custom Policy</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editPolicyTitle" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="editPolicyTitle" name="title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editPolicyContent" class="form-label">Content</label>
+                            <textarea class="form-control" id="editPolicyContent" name="content" rows="6" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editPolicyActive" name="is_active">
+                                <label class="form-check-label" for="editPolicyActive">
+                                    Active
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="updatePolicyBtn">Update Policy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Policy Modal -->
+    <div class="modal fade" id="deletePolicyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Policy</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete this policy?</p>
+                    <form id="deletePolicyForm">
+                        <input type="hidden" id="deletePolicyId">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeletePolicyBtn">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add FAQ Modal -->
+    <div class="modal fade" id="addFaqModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New FAQ</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addFaqForm">
+                        <div class="mb-3">
+                            <label for="addQuestion" class="form-label">Question</label>
+                            <textarea class="form-control" id="addQuestion" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="addAnswer" class="form-label">Answer</label>
+                            <textarea class="form-control" id="addAnswer" rows="4" required></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveFaqBtn">Save FAQ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit FAQ Modal -->
+    <div class="modal fade" id="editFaqModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit FAQ</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editFaqForm">
+                        <input type="hidden" id="editFaqId">
+                        <div class="mb-3">
+                            <label for="editQuestion" class="form-label">Question</label>
+                            <textarea class="form-control" id="editQuestion" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editAnswer" class="form-label">Answer</label>
+                            <textarea class="form-control" id="editAnswer" rows="4" required></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="updateFaqBtn">Update FAQ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Company Info -->
+        <div class="col-md-6 mb-3">
+            <h4>Company Information</h4>
+            <div class="form-group">
+                {{ form.name.label_tag }}
+                {{ form.name }}
+                {% if form.name.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.name.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.description.label_tag }}
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.description.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.address.label_tag }}
+                {{ form.address }}
+                {% if form.address.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.address.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.phone.label_tag }}
+                {{ form.phone }}
+                {% if form.phone.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.phone.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.email.label_tag }}
+                {{ form.email }}
+                {% if form.email.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.email.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.website.label_tag }}
+                {{ form.website }}
+                {% if form.website.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.website.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Bot Configuration -->
+        <div class="col-md-6 mb-3">
+            <h4>Bot Configuration</h4>
+            <div class="form-group">
+                {{ form.language.label_tag }}
+                {{ form.language }}
+                {% if form.language.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.language.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.timezone.label_tag }}
+                {{ form.timezone }}
+                {% if form.timezone.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.timezone.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                {{ form.response_delay.label_tag }}
+                {{ form.response_delay }}
+                {% if form.response_delay.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.response_delay.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                {{ form.typing_duration.label_tag }}
+                {{ form.typing_duration }}
+                {% if form.typing_duration.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.typing_duration.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                {{ form.max_retries.label_tag }}
+                {{ form.max_retries }}
+                {% if form.max_retries.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.max_retries.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                {{ form.enable_analytics.label_tag }}
+                {{ form.enable_analytics }}
+                {% if form.enable_analytics.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.enable_analytics.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                {{ form.collect_feedback.label_tag }}
+                {{ form.collect_feedback }}
+                {% if form.collect_feedback.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.collect_feedback.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                {{ form.available_languages.label_tag }}
+                {{ form.available_languages }}
+                {% if form.available_languages.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.available_languages.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Working Hours -->
+        <div class="col-md-6 mb-3">
+            <h4>Working Hours</h4>
+            <div class="form-group">
+                {{ form.monday_hours.label_tag }}
+                {{ form.monday_hours }}
+                {% if form.monday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.monday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.tuesday_hours.label_tag }}
+                {{ form.tuesday_hours }}
+                {% if form.tuesday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.tuesday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.wednesday_hours.label_tag }}
+                {{ form.wednesday_hours }}
+                {% if form.wednesday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.wednesday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.thursday_hours.label_tag }}
+                {{ form.thursday_hours }}
+                {% if form.thursday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.thursday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.friday_hours.label_tag }}
+                {{ form.friday_hours }}
+                {% if form.friday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.friday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.saturday_hours.label_tag }}
+                {{ form.saturday_hours }}
+                {% if form.saturday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.saturday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.sunday_hours.label_tag }}
+                {{ form.sunday_hours }}
+                {% if form.sunday_hours.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.sunday_hours.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Topics -->
+        <div class="col-md-6 mb-3">
+            <h4>Topics</h4>
+            <div class="form-group">
+                {{ form.allowed_topics.label_tag }}
+                {{ form.allowed_topics }}
+                {% if form.allowed_topics.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.allowed_topics.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                {{ form.restricted_topics.label_tag }}
+                {{ form.restricted_topics }}
+                {% if form.restricted_topics.errors %}
+                    <div class="invalid-feedback">
+                        {{ form.restricted_topics.errors.0 }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+            <a href="{% url 'admin_panel:admin_dashboard' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Form validation
+    (function () {
+        'use strict';
+        var forms = document.querySelectorAll('.needs-validation');
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    })();
+
+    // Initialize Bootstrap Switch
+    $('.form-check-input[data-toggle="switch"]').bootstrapSwitch();
+
+    // Policy form handling
+    $('#savePolicyBtn').click(function() {
+        $('#addPolicyForm').submit();
+    });
+
+    $('.edit-policy').click(function() {
+        const policyId = $(this).data('policy-id');
+        const policy = policies.find(p => p.id === policyId);
+        
+        $('#editPolicyId').val(policyId);
+        $('#editPolicyCategory').val(policy.category);
+        $('#editPolicyTitle').val(policy.title);
+        $('#editPolicyContent').val(policy.content);
+        $('#editPolicyActive').prop('checked', policy.is_active);
+    });
+
+    $('#updatePolicyBtn').click(function() {
+        const policyId = $('#editPolicyId').val();
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        formData.append('category', $('#editPolicyCategory').val());
+        formData.append('title', $('#editPolicyTitle').val());
+        formData.append('content', $('#editPolicyContent').val());
+        formData.append('is_active', $('#editPolicyActive').is(':checked'));
+
+        fetch(`{% url 'admin_panel:edit_policy' company.id 0 %}`.replace('0', policyId), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating policy');
+            }
+        });
+    });
+
+    $('.delete-policy').click(function() {
+        const policyId = $(this).data('policy-id');
+        $('#deletePolicyId').val(policyId);
+    });
+
+    $('#confirmDeletePolicyBtn').click(function() {
+        const policyId = $('#deletePolicyId').val();
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        fetch(`{% url 'admin_panel:delete_policy' company.id 0 %}`.replace('0', policyId), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error deleting policy');
+            }
+        });
+    });
+</script>
+{% endblock %}

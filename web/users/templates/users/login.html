@@ -1,0 +1,185 @@
+{% extends 'admin_panel/base.html' %}
+{% load static i18n %}
+
+{% block title %}{% trans 'Admin Login' %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background-color: #f8f9fa;
+    }
+    .login-container {
+        max-width: 400px;
+        margin: 0 auto;
+    }
+    .card {
+        border: none;
+        border-radius: 10px;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    .card-header {
+        background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+        border-radius: 10px 10px 0 0 !important;
+        padding: 1.5rem;
+    }
+    .login-logo {
+        width: 120px;
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center align-items-center min-vh-100">
+        <div class="col-md-8 col-lg-6">
+            <div class="text-center mb-4">
+                <img src="{% static 'admin_panel/img/logo.png' %}" alt="Logo" class="login-logo" onerror="this.style.display='none'">
+                <h2 class="text-primary">{% trans 'ChatBot Admin' %}</h2>
+            </div>
+            
+            <div class="card shadow-sm">
+                <div class="card-header text-white text-center">
+                    <h4 class="mb-0">{% trans 'Sign In to Your Account' %}</h4>
+                </div>
+                <div class="card-body p-4">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                <i class="fas {% if message.tags == 'success' %}fa-check-circle{% else %}fa-exclamation-circle{% endif %} me-2"></i>
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="{% trans 'Close' %}"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="username" class="form-label">{% trans 'Email or Username' %}</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                <input type="text" 
+                                       name="username" 
+                                       class="form-control form-control-lg {% if form.username.errors %}is-invalid{% endif %}" 
+                                       id="username" 
+                                       placeholder="{% trans 'Enter your email or username' %}" 
+                                       value="{{ form.username.value|default:'' }}" 
+                                       required
+                                       autofocus>
+                            </div>
+                            {% if form.username.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.username.errors.0 }}
+                                </div>
+                            {% else %}
+                                <div class="invalid-feedback">
+                                    {% trans 'Please enter your email or username.' %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <label for="password" class="form-label">{% trans 'Password' %}</label>
+                                <a href="{% url 'admin_panel:password_reset' %}" class="text-decoration-none small">
+                                    {% trans 'Forgot password?' %}
+                                </a>
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                <input type="password" 
+                                       name="password" 
+                                       class="form-control form-control-lg {% if form.password.errors %}is-invalid{% endif %}" 
+                                       id="password" 
+                                       placeholder="{% trans 'Enter your password' %}" 
+                                       required>
+                                <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            {% if form.password.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.password.errors.0 }}
+                                </div>
+                            {% else %}
+                                <div class="invalid-feedback">
+                                    {% trans 'Please enter your password.' %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" name="remember_me" id="remember_me">
+                            <label class="form-check-label" for="remember_me">
+                                {% trans 'Remember me' %}
+                            </label>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-sign-in-alt me-2"></i> {% trans 'Sign In' %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="card-footer text-center py-3">
+                    <p class="mb-0">
+                        {% trans 'Need an account?' %} 
+                        <a href="#" class="text-decoration-none">{% trans 'Contact support' %}</a>
+                    </p>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4">
+                <p class="text-muted small">
+                    &copy; {% now "Y" %} {% trans 'ChatBot Admin. All rights reserved.' %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle password visibility
+        const togglePassword = document.getElementById('togglePassword');
+        const passwordInput = document.getElementById('password');
+        
+        if (togglePassword && passwordInput) {
+            togglePassword.addEventListener('click', function() {
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                const icon = this.querySelector('i');
+                icon.classList.toggle('fa-eye');
+                icon.classList.toggle('fa-eye-slash');
+            });
+        }
+        
+        // Auto-hide alerts after 5 seconds
+        const alerts = document.querySelectorAll('.alert-dismissible');
+        alerts.forEach(alert => {
+            setTimeout(() => {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }, 5000);
+        });
+        
+        // Form validation
+        const forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    });
+</script>
+{% endblock %}

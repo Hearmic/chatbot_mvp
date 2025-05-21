@@ -16,7 +16,8 @@ from sqlalchemy.pool import StaticPool
 
 from main import app, get_db
 from database import Base
-from models import User, Company, Message
+from users.models import User, Company
+from admin_panel.models import Message
 
 # Create a test database
 TEST_DATABASE_URL = "sqlite:///:memory:"

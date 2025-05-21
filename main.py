@@ -1,18 +1,26 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request, Depends
 import os
-import httpx
+from datetime import datetime
+from typing import Dict, Any
 from dotenv import load_dotenv
 from openai import OpenAI
-from sqlalchemy.exc import SQLAlchemyError
 from database import SessionLocal
 from sqlalchemy.orm import Session
-from models import User, Message, Company
+import django
 import logging
+import pytz
+from django.conf import settings
 
 logger = logging.getLogger("uvicorn")
 
 # Load environment variables
 load_dotenv()
+settings.configure()
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.web.settings")
+django.setup()
+
+from web.admin_panel.models import Message
+from users.models import Company, Client
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY")
@@ -39,281 +47,341 @@ def get_db():
 async def health_check():
     return {"status": "ok"}
 
-def load_company_policy(company_id: int = 1):
-    """Загрузка политики компании с валидацией и дефолтными значениями."""
-    try:
-        db = SessionLocal()
-        company = db.query(Company).filter(Company.id == company_id).first()
-        
-        if not company:
-            logger.warning(f"Компания с ID {company_id} не найдена.")
-            default_policy = _get_default_policy()
-            return default_policy
-        
-        policy = company.policy or {}
-        
-        # Валидация и дополнение политики значениями по умолчанию
-        validated_policy = {
-            "company": company.name,
-            "allowed_topics": policy.get("allowed_topics", ["support"]),
-            "restricted_topics": policy.get("restricted_topics", ["confidential"]),
-            "handoff_trigger": policy.get("handoff_trigger", ["help"]),
-            "admin_settings": {**{
-                "admin_id": None,
-                "notifications_enabled": False
-            }, **policy.get("admin_settings", {})},
-            "company_info": {
-                "описание": company.description or "",
-                "адрес": "",
-                "телефон": "",
-                "сайт": company.website or ""
-            }
-        }
-        
-        return validated_policy
+
+
+def get_company_settings(company_id: int, db: Session) -> Dict[str, Any]:
+    """Get company settings from database."""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        return None
     
-    except SQLAlchemyError as e:
-        logger.error(f"Ошибка при загрузке политики: {e}")
-        return (f"Ошибка при загрузке политики: {e}")
-    finally:
-        db.close()
+    return {
+        "company": company.name,
+        "language": company.language,
+        "timezone": company.timezone,
+        "working_hours": {
+            "monday": company.monday_hours,
+            "tuesday": company.tuesday_hours,
+            "wednesday": company.wednesday_hours,
+            "thursday": company.thursday_hours,
+            "friday": company.friday_hours,
+            "saturday": company.saturday_hours,
+            "sunday": company.sunday_hours
+        },
+        "messages": {
+            "welcome": company.welcome_message,
+            "unavailable": company.unavailable_message,
+            "fallback": company.fallback_message,
+            "handoff": company.handoff_message,
+            "off_hours": company.off_hours_message,
+            "thanks": company.thanks_message
+        },
+        "allowed_topics": company.allowed_topics.split(','),
+        "restricted_topics": company.restricted_topics.split(','),
+        "handoff_trigger": company.handoff_trigger.split(','),
+        "admin_settings": {
+            "admin_id": company.admin_id,
+            "notifications_enabled": company.notifications_enabled,
+            "notification_hours": company.notification_hours,
+            "email_notifications": company.email_notifications,
+            "email_address": company.admin_email
+        },
+        "company_info": {
+            "description": company.description,
+            "address": company.address,
+            "phone": company.phone,
+            "email": company.email,
+            "website": company.website
+        },
+        "policies": {
+            "cancellation": company.cancellation_policy,
+            "privacy": company.privacy_policy,
+            "refund": company.refund_policy,
+            "late_arrival": company.late_arrival_policy,
+            "no_show": company.no_show_policy
+        },
+        "bot_settings": {
+            "response_delay": company.response_delay,
+            "typing_duration": company.typing_duration,
+            "max_retries": company.max_retries,
+            "enable_analytics": company.enable_analytics,
+            "collect_feedback": company.collect_feedback,
+            "available_languages": company.available_languages.split(',')
+        }
+    }  
 
-def build_prompt(script_profile: dict, user_message: str, history: list = None, user_settings: dict = None, user_data: User = None):
-    """Создание промпта для ChatGPT с учетом истории и настроек пользователя."""
-    preferred_language = user_settings.get("preferred_language", "ru")
+def is_working_hours(working_hours: Dict[str, str], timezone_str: str = "Asia/Almaty") -> bool:
+    """Check if current time is within working hours.
+    
+    Args:
+        working_hours: Dictionary mapping weekdays to time ranges (e.g., {"monday": "9:00-18:00"})
+        timezone_str: Timezone string (default: "Asia/Almaty")
+        
+    Returns:
+        bool: True if current time is within working hours, False otherwise
+    """
+    try:
+        # Get current time in the specified timezone
+        tz = pytz.timezone(timezone_str)
+        now = datetime.now(tz)
+        current_weekday = now.strftime("%A").lower()
+        
+        # Get working hours for current day (case-insensitive)
+        day_hours = working_hours.get(current_weekday)
+        if not day_hours:
+            return False
+            
+        # Parse working hours (format: "HH:MM-HH:MM")
+        try:
+            start_time_str, end_time_str = day_hours.strip().split("-")
+            start_time = datetime.strptime(start_time_str.strip(), "%H:%M").time()
+            end_time = datetime.strptime(end_time_str.strip(), "%H:%M").time()
+        except (ValueError, AttributeError) as e:
+            logger.error(f"Invalid time format in working hours: {day_hours}. Error: {e}")
+            return False
+            
+        current_time = now.time()
+        
+        # Handle overnight working hours (e.g., 22:00-06:00)
+        if end_time < start_time:
+            return current_time >= start_time or current_time <= end_time
+        return start_time <= current_time <= end_time
+        
+    except pytz.exceptions.UnknownTimeZoneError as e:
+        logger.error(f"Unknown timezone: {timezone_str}. Error: {e}")
+        return True  # Default to True to avoid blocking messages due to timezone issues
+    except Exception as e:
+        logger.error(f"Error checking working hours: {e}", exc_info=True)
+        return True  # Default to True to avoid blocking messages on error  # Default to available if there's an error
+
+def build_prompt(script_profile: dict, user_message: str, history: list = None, 
+                user_settings: dict = None, user_data: Client = None) -> str:
+    """Create a prompt for the AI model using the script profile.
+    
+    Args:
+        script_profile: Bot's script profile configuration
+        user_message: Current user message
+        history: List of previous messages in the conversation
+        user_settings: User-specific settings
+        user_data: Client model instance with additional user info
+        
+    Returns:
+        str: Formatted prompt for the AI model
+    """
+    if history is None:
+        history = []
+    if user_settings is None:
+        user_settings = {}
+
+    # Build context sections
+    sections = []
+    
+    # 1. Bot Identity and Role
+    company_name = script_profile.get('company', 'компания')
+    sections.append(f"""Ты - {company_name} чат-бот. 
+Ты вежливый и профессиональный ассистент, который помогает клиентам с их вопросами.""")
+    
+    # 2. Working Hours
+    working_hours = script_profile.get('working_hours', {})
+    if working_hours:
+        working_hours_list = [
+            f"- {day.capitalize()}: {hours if hours else 'Выходной'}" 
+            for day, hours in working_hours.items()
+        ]
+        sections.append("\n\nЧасы работы:\n" + "\n".join(working_hours_list))
+    
+    # 3. Company Information
     company_info = script_profile.get('company_info', {})
-
-    system_prompt = f"""
-Ты — виртуальный помощник компании {script_profile.get('company', 'неизвестно')}.
-Твой текущий язык общения: {preferred_language}.
-
-ВАЖНАЯ ИНФОРМАЦИЯ О КОМПАНИИ:
-- Название: {script_profile.get('company')}
-- Адрес: {company_info.get('адрес')}
-- Телефон: {company_info.get('телефон')}
-- Сайт: {company_info.get('сайт')}
-- Описание: {company_info.get('описание')}
-
-При вопросах о местоположении или контактах ВСЕГДА используй ТОЛЬКО эту информацию.
-
-Отвечай строго в рамках следующих политик:
-- Разрешённые темы: {script_profile.get('allowed_topics', [])}
-- Запрещённые темы: {script_profile.get('restricted_topics', [])}
-
-{f'Информация о клиенте:\n- Постоянный клиент: {user_data.is_постоянный_клиент}\n- Доступные акции: {user_data.доступные_акции}\n- Персональная скидка: {user_data.персональная_скидка}%' if user_data else ''}
-
-Учитывай историю предыдущего общения с пользователем для поддержания контекста.
-
-Если вопрос клиента выходит за рамки или тебе не хватает данных — отвечай на языке {preferred_language}:
-{HANDOFF_PHRASE}
-
-Всегда отвечай уважительно, коротко и полезно на языке {preferred_language}.
-"""
-    messages = [{"role": "system", "content": system_prompt}]
+    if company_info:
+        info_lines = []
+        if desc := company_info.get('description'):
+            info_lines.append(desc)
+        if address := company_info.get('address'):
+            info_lines.append(f"Адрес: {address}")
+        if phone := company_info.get('phone'):
+            info_lines.append(f"Телефон: {phone}")
+        if email := company_info.get('email'):
+            info_lines.append(f"Email: {email}")
+        if website := company_info.get('website'):
+            info_lines.append(f"Сайт: {website}")
+            
+        if info_lines:
+            sections.append("\n\nО компании:\n" + "\n".join(info_lines))
+    
+    # 6. User Context
+    if user_data:
+        user_info = []
+        if full_name := getattr(user_data, 'full_name', ''):
+            user_info.append(f"Имя: {full_name}")
+        if phone := getattr(user_data, 'phone_number', ''):
+            user_info.append(f"Телефон: {phone}")
+            
+        if user_info:
+            sections.append("\n\nИнформация о пользователе:\n" + "\n".join(user_info))
+    
+    # 7. Conversation History
     if history:
-        for msg in history:
-            role = "user" if msg.user_id == history[0].user_id else "assistant"
-            messages.append({"role": role, "content": msg.text})
+        history_lines = ["\n\nИстория переписки:"]
+        for msg in history[-5:]:  # Last 5 messages for context
+            role = "Пользователь" if msg.get("role") == "user" else "Ассистент"
+            history_lines.append(f"{role}: {msg.get('content', '')}")
+        sections.append("\n".join(history_lines))
+    
+    # 8. Current Message
+    sections.append(f"\n\nПользователь: {user_message}")
+    
+    # 9. Instructions
+    tone = script_profile.get('bot_settings', {}).get('tone', 'вежливым и профессиональным')
+    off_topic = script_profile.get('messages', {}).get('off_topic', 'вежливо укажи на это')
+    unknown = script_profile.get('messages', {}).get('unknown', 'предложи связаться с оператором')
+    
+    instructions = f"""
+    Инструкции:
+    1. Отвечай на том же языке, на котором был задан вопрос.
+    2. Будь {tone}.
+    3. Если вопрос не по теме, {off_topic}.
+    4. Если не знаешь ответа, {unknown}.
+    """
+    
+    sections.append(instructions)
+    
+    # Combine all sections
+    system_prompt = "".join(sections)
+    
+    # Prepare messages for the chat model
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history
+    for msg in history[-10:]:  # Last 10 messages for context
+        role = "user" if msg.get("role") == "user" else "assistant"
+        messages.append({"role": role, "content": msg.get("content", "")})
+    
+    # Add current user message
     messages.append({"role": "user", "content": user_message})
+    
     return messages
 
 
 def should_handoff(reply: str, handoff_triggers: list = None):
-    """Проверка, нужно ли передавать оператору."""
-    if handoff_triggers is None:
-        handoff_triggers = [
-            "не уверена", 
-            "не знаю", 
-            "не могу ответить",
-            "не уверен", 
-            "помощь",
-            "оператор",
-            "специалист",
-            "не могу помочь",
-            "консультация",
-            "помощь оператора",
-            HANDOFF_PHRASE.lower()
-        ]
-    
+    """Check if the conversation should be handed off to a human operator."""
+    if not reply:
+        return False
+        
+    handoff_triggers = handoff_triggers or ["help"]
     reply_lower = reply.lower()
     
-    # Проверка точных вхождений
+    # Check for handoff trigger phrases
     for trigger in handoff_triggers:
-        if trigger.lower() in reply_lower:
-            logger.info(f"Найден триггер для передачи оператору: {trigger}")
+        if isinstance(trigger, str) and trigger.lower() in reply_lower:
             return True
     
+    # Check for uncertainty in the response
+    uncertainty_phrases = [
+        "не знаю", "не уверен", "не могу ответить", 
+        "не располагаю информацией", "не могу помочь",
+        "извините, но я не могу", "к сожалению, я не могу"
+    ]
+    
+    for phrase in uncertainty_phrases:
+        if phrase in reply_lower:
+            return True
+    
+    # Check if the response is too short or seems like a fallback
+    if len(reply.strip()) < 10 and any(word in reply_lower for word in ["извините", "понимаю", "попробуйте"]):
+        return True
+            
     return False
 
-async def send_telegram_message(chat_id: int, text: str):
-    """Отправка сообщения в Telegram."""
-    async with httpx.AsyncClient() as client:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            response = await client.post(url, json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML"
-            })
-            response.raise_for_status()
-            logger.info(f"Сообщение отправлено в чат {chat_id}")
-        except Exception as e:
-            logger.error(f"Ошибка отправки в Telegram: {e}")
-            raise
-
-async def notify_admin(admin_id: str, user_info: dict, user_message: str, script_profile: dict):
-    """Отправка уведомления администратору о проблеме пользователя."""
-    try:
-        user_username = user_info.get('username', 'Нет username')
-        user_id = user_info['id']
-        first_name = user_info.get('first_name', 'Нет имени')
-        
-        admin_message = (
-            f"❗️ Требуется ваше внимание!\n\n"
-            f"Пользователь: {first_name}\n"
-            f"Username: @{user_username}\n"
-            f"ID: {user_id}\n\n"
-            f"Сообщение: {user_message}"
-        )
-        
-        logger.info(f"Попытка отправки уведомления админу {admin_id}")
-        await send_telegram_message(int(admin_id), admin_message)
-        logger.info(f"Уведомление успешно отправлено админу {admin_id}")
-    except ValueError as e:
-        logger.error(f"Неверный формат ID администратора: {admin_id}")
-        raise
-    except Exception as e:
-        logger.error(f"Ошибка при отправке уведомления админу: {str(e)}")
-        raise
-
-async def generate_ai_response(
-    prompt: list, 
-    script_profile: dict = None, 
-    user_message: str = None, 
-    client: OpenAI = openai_client
-) -> tuple[str, str]:
-    """
-    Генерация ответа с использованием AI API с указанием использованного сервиса.
-    
-    Args:
-        prompt (list): Список сообщений для генерации ответа
-        script_profile (dict, optional): Профиль компании
-        user_message (str, optional): Исходное сообщение пользователя
-        client (OpenAI, optional): Клиент для генерации ответа. По умолчанию OpenAI.
-    
-    Returns:
-        tuple[str, str]: Кортеж с ответом и использованным сервисом
-    """
-    # Проверка на тестовый режим
-    if os.getenv('TESTING', 'false').lower() == 'true':
-        return "Mocked AI Response", "OpenAI"
-
-    try:
-        # Попытка использования указанного клиента
-        try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=prompt,
-                max_tokens=150,
-                temperature=0.7
-            )
-            service_used = "OpenAI"
-        except Exception as openai_error:
-            logger.info(f"OpenAI недоступен: {openai_error}")
-            
-            # Fallback на Nebius
-            response = nebius_client.chat.completions.create(
-                model="meta-llama/Meta-Llama-3.1-70B-Instruct",
-                messages=prompt,
-                max_tokens=150,
-                temperature=0.7,
-            )
-            service_used = "Nebius"
-        
-        # Извлекаем текст ответа
-        reply = response.choices[0].message.content.strip()
-        
-        return reply, service_used
-    
-    except Exception as e:
-        logger.error(f"Ошибка при генерации ответа: {e}")
-        return "Извините, сервис временно недоступен. Попробуйте позже.", "None"
 
 @app.post("/webhook/{company_token}")
 async def webhook(request: Request, company_token: str, db: Session = Depends(get_db)):
     try:
-        # Находим компанию по токену
+        # Get company by token
         company = db.query(Company).filter(Company.telegram_token == company_token).first()
-        
         if not company:
-            raise HTTPException(status_code=404, detail="Company not found")
-        
-        # Проверяем, что компания активна
-        if not company.is_active:
-            raise HTTPException(status_code=403, detail="Company is not active")
-        
-        # Получаем данные от Telegram
-        user_data = await request.json()
-        user_info = user_data.get('message', {}).get('from', {})
-        chat_id = user_info.get('id')
-        user_message = user_data.get('message', {}).get('text', '')
-        
-        # Находим или создаем пользователя для этой компании
-        user = db.query(User).filter(
-            User.telegram_id == chat_id, 
-            User.company_id == company.id
-        ).first()
-        
-        if not user:
-            user = User(
-                telegram_id=chat_id, 
-                company_id=company.id, 
-                username=user_info.get('username'),
-                settings={},
-                is_постоянный_клиент=False,
-                доступные_акции=[],
-                персональная_скидка=0.0
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        
-        # Используем политику компании
+            logger.error(f"Company not found with token: {company_token}")
+            return {"status": "error", "message": "Company not found"}
+            
+        # Load company policy
         script_profile = load_company_policy(company.id)
         
-        if user_message.startswith('/my_id'):
-            user_info_message = (
-                f"Ваш Telegram ID: {chat_id}\n"
-                f"Имя: {user_info.get('first_name', 'Не указано')}\n"
-                f"Username: @{user_info.get('username', 'Не указан')}"
-            )
-            await send_telegram_message(chat_id, user_info_message)
-            return {"status": "ok"}
-
-        # Обработка команды /setlang
-        if user_message.startswith("/setlang"):
-            parts = user_message.split()
-            if len(parts) == 2:
-                lang_code = parts[1].lower()
-                update_user_settings(db, user.id, {"preferred_language": lang_code})
-                await send_telegram_message(chat_id, f"Язык общения изменен на {lang_code}.")
-                return {"status": "ok"}
-
-        # Получение истории сообщений
-        history = db.query(Message).filter(
-            Message.user_id == user.id
-        ).order_by(Message.timestamp).all()
-
-        # Получение настроек пользователя
-        user_settings = get_user_settings(db, user.id)
-
-        try:
-            # Построение промпта
-            prompt = build_prompt(script_profile, user_message, history, user_settings, user)
+        # Process webhook data
+        data = await request.json()
+        logger.info(f"Received webhook data: {data}")
+        
+        # Handle different update types
+        if "message" in data:
+            message = data["message"]
+            chat_id = message["chat"]["id"]
+            telegram_user_id = message["from"]["id"]
+            
+            # Get or create client
+            client = db.query(Client).filter(Client.telegram_id == telegram_user_id, Client.company == company).first()
+            if not client:
+                # Create new client
+                client = Client(
+                    telegram_id=telegram_user_id,
+                    company=company,
+                    username=message["from"].get("username"),
+                    settings={"preferred_language": "ru"}  # Default language
+                )
+                db.add(client)
+                db.commit()
+                db.refresh(client)
+            
+            # Update client data if available
+            if "first_name" in message["from"]:
+                client.username = message["from"].get("username", "")
+                db.commit()
+                db.refresh(client)
+            
+            # Get text message
+            text = message.get("text", "").strip()
+            # Get conversation history for this client
+            history = db.query(Message).filter(
+                Message.company == company,
+                Message.user == client
+            ).order_by(Message.timestamp.desc()).limit(10).all()  # Last 10 messages
+            
+            # Get user settings
+            user_settings = client.settings or {}
+            
+            # Detect language of incoming message
+            detected_language = detect_language(text)
+    
+            # Build the prompt with detected language
+            messages = build_prompt(script_profile, text, history, user_settings, client, detected_language)
             reply = None
             service_used = None
+            
+            try:
+                reply, service_used = await generate_ai_response(messages)
+            except Exception as e:
+                logger.error(f"Error generating AI response: {e}")
+                reply = script_profile.get('messages', {}).get('error', 'Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.')
+                
+            # If reply is in English but detected language was Russian, translate it
+            if detected_language == 'ru' and is_english(reply):
+                reply = translate_to_russian(reply)
+                
+            # Save the user message
+            user_message = Message.create_with_response_time(
+                content=text,
+                company=company,
+                user=client,
+                is_bot_response=False
+            )
 
-            reply, service_used = await generate_ai_response(prompt)
+            # Save the bot response
+            bot_response = Message.create_with_response_time(
+                content=reply,
+                company=company,
+                user=client,
+                is_bot_response=True
+            )
+
+            # Update daily analytics
+            Analytics.update_daily_analytics(company)
 
             # Добавляем информацию об использованном сервисе
             reply_with_service = f"{reply}\n\n[Использован: {service_used}]"
@@ -354,25 +422,8 @@ async def webhook(request: Request, company_token: str, db: Session = Depends(ge
                 await send_telegram_message(chat_id, reply_with_service)
                 return {"status": "ok", "service_used": service_used}
 
-        except Exception as processing_error:
-            logger.error(f"Ошибка обработки сообщения: {processing_error}")
-            await send_telegram_message(chat_id, "Произошла ошибка при обработке вашего сообщения.")
-            return {"status": "error", "error": str(processing_error)}
-
     except Exception as e:
-        logger.error(f"Критическая ошибка в webhook: {e}")
-        return {"status": "critical_error", "error": str(e)}
+        logger.error(f"Unexpected error in webhook: {e}")
+        return {"status": "error", "error": "Internal server error"}
 
-def get_user_settings(db: Session, user_id: int) -> dict:
-    """Получение настроек пользователя из базы данных."""
-    user = db.query(User).filter(User.id == user_id).first()
-    return user.settings if user and user.settings else {}
 
-def update_user_settings(db: Session, user_id: int, settings: dict):
-    """Обновление настроек пользователя в базе данных."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        user.settings = settings
-        db.commit()
-        db.refresh(user)
-    return user.settings if user else {}

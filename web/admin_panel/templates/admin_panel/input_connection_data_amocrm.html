@@ -1,0 +1,105 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">AmoCRM Connection Settings</h4>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <form method="POST" action="{% url 'admin_panel:input_connection_data' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="service" value="amocrm">
+                        
+                        <div class="mb-3">
+                            <label for="base_url" class="form-label">AmoCRM Domain</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="base_url" name="base_url" 
+                                    placeholder="your-domain" required>
+                                <span class="input-group-text">.amocrm.ru</span>
+                            </div>
+                            <div class="form-text">Enter your AmoCRM subdomain (e.g., 'mycompany' for mycompany.amocrm.ru)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="client_id" class="form-label">Integration ID (client_id)</label>
+                            <input type="text" class="form-control" id="client_id" name="client_id" 
+                                placeholder="Enter Integration ID" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="client_secret" class="form-label">Client Secret</label>
+                            <input type="password" class="form-control" id="client_secret" name="client_secret" 
+                                placeholder="Enter Client Secret" required>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="auth_code" class="form-label">Authorization Code</label>
+                            <input type="text" class="form-control" id="auth_code" name="auth_code" 
+                                placeholder="Enter Authorization Code" required>
+                            <div class="form-text">
+                                <a href="#" id="getAuthCodeLink" class="text-decoration-none">
+                                    <i class="fas fa-question-circle me-1"></i>How to get authorization code?
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'admin_panel:select_service' %}" class="btn btn-outline-secondary me-md-2">
+                                <i class="fas fa-arrow-left me-1"></i> Back
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i> Save & Continue
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4" id="authCodeHelp" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">How to get AmoCRM Authorization Code</h5>
+                </div>
+                <div class="card-body">
+                    <ol class="mb-0">
+                        <li>Log in to your AmoCRM account</li>
+                        <li>Go to <strong>API</strong> in the left sidebar</li>
+                        <li>Click on <strong>Create integration</strong> or select an existing one</li>
+                        <li>Copy the <strong>Integration ID (client_id)</strong> and <strong>Client Secret</strong></li>
+                        <li>Set the following redirect URI in your integration settings:
+                            <div class="alert alert-light mt-2 p-2">
+                                <code>{{ request.scheme }}://{{ request.get_host }}{% url 'admin_panel:input_connection_data' %}?service=amocrm</code>
+                            </div>
+                        </li>
+                        <li>Click on the authorization link and grant permissions</li>
+                        <li>You'll be redirected back with the authorization code in the URL</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.getElementById('getAuthCodeLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        const helpSection = document.getElementById('authCodeHelp');
+        helpSection.style.display = helpSection.style.display === 'none' ? 'block' : 'none';
+    });
+</script>
+{% endblock %}
+
+{% endblock %}
